@@ -1,0 +1,244 @@
+"""
+Author: Pran Pandey
+
+"""
+import re, os
+import subprocess as sub
+import datetime as dtm
+from os import path
+from tkinter import messagebox
+
+
+"""
+Create the user objects.
+Pre-requisite: The province name and the 'users.csv' file
+Return: List containing user objects.
+"""
+def CreateListOfUsers(province_name, file):
+	L = []
+	with open(file, encoding="utf8") as f:
+		for line in f:
+			if province_name in line:	
+				TA = line.split(',', 6)[:7] #Creates the list and splits at each comma
+				string = "".join(TA[6]) #Converts sub-array into string.
+				string2 = string.split("active", 1)[1] #Split the string starting after the pattern 'active' (or 'inactive')
+				interestInfo = GetInterestInfo(string2) 
+				# yyyy-mm-dd pattern match the above string.
+				m = re.search("([12]\d{3}-(0[1-9]|1[0-2])-(0[1-9]|[12]\d|3[01]))", string).group()
+				D = {
+				"first_name": TA[0],
+				"last_name": TA[1],
+				"email_address": TA[2],
+				"city": TA[3],
+				"province": TA[4],
+				"country": TA[5],
+				"signup_date": m,
+				"interest_info": interestInfo 
+				}
+				L.append(D)
+	return L
+
+
+"""
+Returns whether the peroson is a maker, requires a maker or is willing to help people with disabilities.
+Returns: dicttionary object
+"""
+def GetInterestInfo(string):
+	stringToArray = string.split(',')
+	dictionaryOfInterest = {
+							"isPersonWithDisability": stringToArray[1], #Array position that holds the value for this data
+							"isInterestedInHelping": stringToArray[2], #Array position that holds the value for this data
+							"isMaker": stringToArray[4] #Array position that holds the value of this data
+							}
+	
+	return dictionaryOfInterest
+
+
+"""
+Returns a list of users that signed up in the past 30 days from today.
+Pre-requisite: a list containing user objects.
+Return: a list of user objects that signed up in the last 30 days.
+"""
+def SignUpsWithinThirtyDays(L):
+	deltaDays= 30
+	comparisonDate = (dtm.datetime.now() + dtm.timedelta(-deltaDays)).date()
+	l = []
+	for i in L:
+		signedupDate = i['signup_date']
+		signedupDateObject = (dtm.datetime.strptime(signedupDate, '%Y-%m-%d')).date()
+		if signedupDateObject > comparisonDate:
+			l.append(i)
+
+	return l
+
+
+"""
+Writes to file in human readable format.
+Pre-requisite: list containing user objects, the province name, and the text file to write data.
+Return: none
+"""
+def SaveFullList(L, province, f):
+	
+	intrestDictonary = GetIntrestCount(L)
+
+	count = 0
+	print("For " + province.upper() + ": " , file=f)
+	print("*** Total # of Signups: " + str(len(L)) + " ***" + "\n", file=f)
+	print("Total # of Makers: " + str(intrestDictonary["isMakerCount"]), file=f )
+	print("List of Makers: " + str(intrestDictonary["isMakerList"]) + "\n", file=f)
+	print("Total # of people requiring Makers: " + str(intrestDictonary["isPersonWithDisabilityCount"]), file=f)
+	print("List of people requiring Makers: " + str(intrestDictonary["isPersonWithDisabilityList"]) + "\n", file=f)
+	print("_____________________________________________________" + "\n", file=f)
+	print("In Detail: ", file=f)
+
+	stringInNeedOfAT = ""
+	stringIsMaker = ""
+	for i in L:
+		count += 1
+		if i["interest_info"]["isPersonWithDisability"] == "0":
+			stringInNeedOfAT = "No"
+		elif i["interest_info"]["isPersonWithDisability"] == "1":
+			stringInNeedOfAT = "Yes"
+		else:
+			stringInNeedOfAT = "No Data"
+
+		if i["interest_info"]["isMaker"] == "0":
+			stringIsMaker = "No"
+		elif i["interest_info"]["isMaker"] == "1":
+			stringIsMaker = "Yes"
+		else:
+			stringIsMaker = "No Data"
+
+
+		print(str(count) + ")", file=f)
+		if i["city"] is "": #If city isn't given, then print below
+			print(" Name: " + i['first_name'] + " " + i['last_name'] + " \n " + "Email: " + i['email_address'] + " \n " + 
+			"City: No Data" + " \n " + "Province/State: " + i['province'] + " \n " + "Signed up on: " + i['signup_date'] + "\n" + 
+			" Maker: " + stringIsMaker + "\n" + " Requires Maker: " + stringInNeedOfAT, file=f )
+			print("_____________________________________", file=f)
+		else: #If city is given, then print below
+			print(" Name: " + i['first_name'] + " " + i['last_name'] + " \n " + "Email: " + i['email_address'] + " \n " + 
+			"City: " + i['city'] + " \n " + "Province/State: " + i['province'] + " \n " + "Signed up on: " + i['signup_date'] + "\n" +
+			" Maker: " + stringIsMaker + "\n" + " Requires Maker: " + stringInNeedOfAT, file=f)
+			print("_____________________________________", file=f)
+
+
+"""
+Obtain the number of makers and people with disabilities signed up on website from a given province.
+Return: a dictionary containing both the count and list of names of makers and people with disabilities.
+"""
+def GetIntrestCount(L):
+	isMakerCount = 0
+	isMakerList = []
+	isPersonWithDisabilityCount = 0
+	isPersonWithDisabilityList = []
+	for i in L:
+		
+		if i["interest_info"]["isMaker"] == "1":
+			name = i["first_name"] + " " + i["last_name"]
+			isMakerCount += 1
+			if not name.strip(): # if no name is give, simply append the user's email address
+				email = i["email_address"]
+				isMakerList.append(email)
+			else:
+				isMakerList.append(name)
+
+		if i["interest_info"]["isPersonWithDisability"] == "1":
+			name = i["first_name"] + " " + i["last_name"]
+			isPersonWithDisabilityCount += 1
+			if not name.strip():
+				email = i["email_address"]
+				isPersonWithDisabilityList.append(email)
+			else:
+				name = i["first_name"] + " " + i["last_name"]
+				isPersonWithDisabilityList.append(name)
+
+	intrestDataDictionary = {
+							"isMakerCount": isMakerCount,
+							"isMakerList": isMakerList,
+							"isPersonWithDisabilityCount": isPersonWithDisabilityCount,
+							"isPersonWithDisabilityList": isPersonWithDisabilityList	
+							}
+
+	return intrestDataDictionary
+
+
+"""
+Writes to file in human readable format.
+Pre-requisite: list containing user objects that signed up in the last 30 days.
+Return: none
+"""
+def SaveSignedUpThrityDays(S, f):
+	count = 0
+	print("\n" + "***************************************", file=f)
+	print("Signups within the last 30 days: " + str(len(S)), file=f)
+	print("_____________________________________", file=f)
+	for i in S:
+		count += 1
+		print(str(count) + ")", file=f)
+		if i["city"] is "": #If city isn't given, then print below
+			print(" Name: " + i['first_name'] + " " + i['last_name'] + " \n " + "Email: " + i['email_address'] + " \n " + "City: No Data" + " \n " + "Province/State: " + i['province'] + " \n " + "Signed up on: " + i['signup_date'], file=f )
+			print("_____________________________________", file=f)
+		else: #If city is given, then print below
+			print(" Name: " + i['first_name'] + " " + i['last_name'] + " \n " + "Email: " + i['email_address'] + " \n " + "City: " + i['city'] + " \n " + "Province/State: " + i['province'] + " \n " + "Signed up on: " + i['signup_date'], file=f)
+			print("_____________________________________", file=f)
+
+
+def GetMasterCount(province, f):
+	count = 0
+	for line in f:
+		if province in line:
+			count += 1
+	return count
+
+
+"""
+MAIN
+"""
+def main():
+	ListOfProvinces = ["Saskatchewan", "Manitoba", "Alberta", "Ontario", "Quebec", "British Columbia", "Nova Scotia", "New Brunswick", "Newfoundland and Labrador", "Prince Edward Island"]
+	ListOfProvinces.sort() #Sorts the above list alphabetically
+	
+	try:
+		for province in ListOfProvinces:
+			location = province
+			L = CreateListOfUsers(location, "users.csv") # Generate the user object
+			T = SignUpsWithinThirtyDays(L) # Obtain all users that signed up in the past 30 days.
+			
+			filename = province + ".txt"
+			f = open(filename, "w+") # Create a filename with the province of a '.txt' format
+			
+			S = SaveFullList(L, location, f) # Save all users into the appropriate file
+			ST = SaveSignedUpThrityDays(T, f) # Save those users onto the same file.
+			f.close()
+	except FileNotFoundError:
+		messagebox.showinfo("File Not Found!", "users.csv is not in this directory. Please make sure this executable and the 'users.csv' file is in same directory!")
+
+"""
+	masterCount = 0
+	for province in ListOfProvinces:
+		masterCount = masterCount + GetMasterCount(province, "users.csv")
+	masterFile  = "MasterCount.txt"
+	fn = open(masterFile, "w+")
+	print("Sum Total Number of Users for all province: " + str(masterCount), file=fn)
+	fn.close()
+"""
+
+if __name__ == "__main__":
+	main()
+
+'''
+current_directory = os.getcwd()
+master_directory = os.path.join(current_directory, r'Province Data')
+if not os.path.exists(master_directory):
+	os.makedirs(master_directory)
+
+
+ListOfProvincesInCWDirectory = ["Saskatchewan.txt", "Manitoba.txt", "Alberta.txt", "Ontario.txt", "Quebec.txt", "British Columbia.txt", "Nova Scotia.txt", "New Brunswick.txt", "Newfoundland and Labrador.txt", "Prince Edward Island.txt"]
+for textfile in ListOfProvincesInCWDirectory:
+	if os.path.isfile(textfile):
+		print("Yes: " + textfile)
+		os.rename(textfile, master_directory)
+	else:
+		print("No" + textfile )
+'''
